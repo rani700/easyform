@@ -1,0 +1,28 @@
+Subject: Action needed: a few details are missing for your exam application
+
+Hi {{ candidate_name or "there" }},
+
+Thanks for sending your documents to EasyForm. We tried to auto-fill your exam application
+but couldn't complete it because of the items below. Please reply to this email with the
+missing information so we can finish the form for you.
+
+{% if missing_fields %}
+--- Information we still need ---
+{% for field in missing_fields %}
+  - {{ field }}
+{% endfor %}
+{% endif %}
+
+{% if validation_errors %}
+--- Issues with the documents you sent ---
+{% for err in validation_errors %}
+  - [{{ err.code }}] {{ err.detail }}
+{% endfor %}
+{% endif %}
+
+Please reply within 6 hours so we can keep your application on track. We'll send one
+follow-up if we don't hear from you.
+
+Reference ID: {{ user_id }}
+
+— EasyForm

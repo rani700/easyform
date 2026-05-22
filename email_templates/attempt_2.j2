@@ -1,0 +1,27 @@
+Subject: Reminder: your exam application is paused — please reply
+
+Hi {{ candidate_name or "there" }},
+
+This is a friendly reminder. We're still waiting on a few details before we can complete
+your exam application. Without these, we won't be able to submit on your behalf.
+
+{% if missing_fields %}
+--- Information we still need ---
+{% for field in missing_fields %}
+  - {{ field }}
+{% endfor %}
+{% endif %}
+
+{% if validation_errors %}
+--- Issues with the documents you sent ---
+{% for err in validation_errors %}
+  - [{{ err.code }}] {{ err.detail }}
+{% endfor %}
+{% endif %}
+
+We've sent this reminder because we didn't receive a reply to our earlier email.
+Please respond within the next 6 hours.
+
+Reference ID: {{ user_id }}
+
+— EasyForm

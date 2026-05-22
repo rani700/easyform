@@ -1,0 +1,241 @@
+{
+  "name": "EasyForm - Inbound Email Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "protocol": "imap",
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "forceReconnect": 60
+        }
+      },
+      "id": "trigger-imap",
+      "name": "IMAP: New Email",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [240, 320],
+      "credentials": {
+        "imap": {
+          "id": "REPLACE_WITH_IMAP_CREDENTIAL_ID",
+          "name": "EasyForm IMAP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the /process payload from the IMAP email.\n// Email body is parsed for structured manual fields (key: value lines).\n// Attachments are turned into base64 documents.\n\nconst item = items[0].json;\nconst binary = items[0].binary || {};\n\n// --- Parse manual fields from email body ---\nconst body = (item.textPlain || item.text || '').toString();\nconst FIELD_KEYS = [\n  'marital_status', 'nationality', 'caste',\n  'mobile_number', 'correspondence_address',\n  'correspondence_pin_code', 'disability_status'\n];\nconst manual = {};\nfor (const key of FIELD_KEYS) {\n  const re = new RegExp('^\\\\s*' + key.replace(/_/g, '[ _-]') + '\\\\s*[:=]\\\\s*(.+)$', 'im');\n  const m = body.match(re);\n  if (m) manual[key] = m[1].trim();\n}\nmanual.email = item.from?.value?.[0]?.address || item.from || '';\n\n// --- Collect attachments ---\nconst documents = [];\nfor (const [key, att] of Object.entries(binary)) {\n  documents.push({\n    filename: att.fileName || key,\n    content_base64: att.data,\n    mime_type: att.mimeType || 'application/octet-stream'\n  });\n}\n\nconst userEmail = item.from?.value?.[0]?.address || item.from || 'unknown@unknown';\n\nreturn [{\n  json: {\n    user_id: userEmail,\n    email: userEmail,\n    documents,\n    manual_fields: manual,\n    attempt_number: 1\n  }\n}];"
+      },
+      "id": "build-payload",
+      "name": "Build /process Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EASYFORM_AGENT_URL }}/process",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-agent",
+      "name": "Call EasyForm Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "complete",
+                    "operator": {"type": "string", "operation": "equals"}
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "complete"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "needs_info",
+                    "operator": {"type": "string", "operation": "equals"}
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "needs_info"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "invalid",
+                    "operator": {"type": "string", "operation": "equals"}
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "invalid"
+            }
+          ]
+        },
+        "options": {"allMatchingOutputs": false}
+      },
+      "id": "switch-status",
+      "name": "Branch on Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [960, 320]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "MERGE INTO EASYFORM.APP.CANDIDATES tgt USING (SELECT :1 AS USER_ID) src ON tgt.USER_ID = src.USER_ID WHEN MATCHED THEN UPDATE SET EMAIL=:2, NAME=:3, FATHER_NAME=:4, MOTHER_NAME=:5, DATE_OF_BIRTH=TRY_TO_DATE(:6), AGE=:7, GENDER=:8, PERMANENT_ADDRESS=:9, PERMANENT_PIN_CODE=:10, CORRESPONDENCE_ADDRESS=:11, CORRESPONDENCE_PIN_CODE=:12, MARITAL_STATUS=:13, NATIONALITY=:14, CASTE=:15, MOBILE_NUMBER=:16, DISABILITY_STATUS=:17, TENTH_JSON=PARSE_JSON(:18), TWELFTH_JSON=PARSE_JSON(:19), GRADUATION_JSON=PARSE_JSON(:20), POSTGRADUATION_JSON=PARSE_JSON(:21), PASSPORT_PHOTO_VALID=:22, SIGNATURE_VALID=:23, AADHAAR_PRESENT=:24, PAN_PRESENT=:25, EXTRACTED_RAW=PARSE_JSON(:26), UPDATED_AT=CURRENT_TIMESTAMP() WHEN NOT MATCHED THEN INSERT (USER_ID, EMAIL, NAME, FATHER_NAME, MOTHER_NAME, DATE_OF_BIRTH, AGE, GENDER, PERMANENT_ADDRESS, PERMANENT_PIN_CODE, CORRESPONDENCE_ADDRESS, CORRESPONDENCE_PIN_CODE, MARITAL_STATUS, NATIONALITY, CASTE, MOBILE_NUMBER, DISABILITY_STATUS, TENTH_JSON, TWELFTH_JSON, GRADUATION_JSON, POSTGRADUATION_JSON, PASSPORT_PHOTO_VALID, SIGNATURE_VALID, AADHAAR_PRESENT, PAN_PRESENT, EXTRACTED_RAW) VALUES (:1, :2, :3, :4, :5, TRY_TO_DATE(:6), :7, :8, :9, :10, :11, :12, :13, :14, :15, :16, :17, PARSE_JSON(:18), PARSE_JSON(:19), PARSE_JSON(:20), PARSE_JSON(:21), :22, :23, :24, :25, PARSE_JSON(:26));",
+        "additionalFields": {
+          "queryParams": "={{ $json.extracted.user_id }},{{ $json.extracted.email }},{{ $json.extracted.name }},{{ $json.extracted.father_name }},{{ $json.extracted.mother_name }},{{ $json.extracted.date_of_birth }},{{ $json.extracted.age }},{{ $json.extracted.gender }},{{ $json.extracted.permanent_address }},{{ $json.extracted.permanent_pin_code }},{{ $json.extracted.correspondence_address }},{{ $json.extracted.correspondence_pin_code }},{{ $json.extracted.marital_status }},{{ $json.extracted.nationality }},{{ $json.extracted.caste }},{{ $json.extracted.mobile_number }},{{ $json.extracted.disability_status }},{{ JSON.stringify($json.extracted.tenth || {}) }},{{ JSON.stringify($json.extracted.twelfth || {}) }},{{ JSON.stringify($json.extracted.graduation || {}) }},{{ JSON.stringify($json.extracted.postgraduation || {}) }},{{ $json.extracted.passport_photo_valid }},{{ $json.extracted.signature_valid }},{{ $json.extracted.aadhaar_present }},{{ $json.extracted.pan_present }},{{ JSON.stringify($json.extracted) }}"
+        }
+      },
+      "id": "snowflake-insert-candidate",
+      "name": "Snowflake: Save Candidate",
+      "type": "n8n-nodes-base.snowflake",
+      "typeVersion": 1,
+      "position": [1280, 140],
+      "credentials": {
+        "snowflake": {
+          "id": "REPLACE_WITH_SNOWFLAKE_CREDENTIAL_ID",
+          "name": "EasyForm Snowflake"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM EASYFORM.APP.PENDING_REQUESTS WHERE USER_ID = :1;",
+        "additionalFields": {
+          "queryParams": "={{ $json.extracted.user_id }}"
+        }
+      },
+      "id": "snowflake-clear-pending",
+      "name": "Snowflake: Clear Pending (if any)",
+      "type": "n8n-nodes-base.snowflake",
+      "typeVersion": 1,
+      "position": [1520, 140],
+      "credentials": {
+        "snowflake": {
+          "id": "REPLACE_WITH_SNOWFLAKE_CREDENTIAL_ID",
+          "name": "EasyForm Snowflake"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build follow-up email body from attempt #1 template (inline so n8n has no file deps).\nconst d = items[0].json;\nconst missing = (d.missing_fields || []).map(f => '  - ' + f).join('\\n') || '  (none)';\nconst errs = (d.validation_errors || []).map(e => `  - [${e.code}] ${e.detail}`).join('\\n') || '  (none)';\nconst name = d.extracted?.name || 'there';\n\nconst subject = 'Action needed: a few details are missing for your exam application';\nconst text = `Hi ${name},\\n\\nThanks for sending your documents to EasyForm. We tried to auto-fill your exam application\\nbut couldn't complete it because of the items below. Please reply to this email with the\\nmissing information so we can finish the form for you.\\n\\n--- Information we still need ---\\n${missing}\\n\\n--- Issues with the documents you sent ---\\n${errs}\\n\\nPlease reply within 6 hours so we can keep your application on track. We'll send one\\nfollow-up if we don't hear from you.\\n\\nReference ID: ${d.user_id}\\n\\n— EasyForm`;\n\nreturn [{ json: { ...d, _email_subject: subject, _email_text: text } }];"
+      },
+      "id": "render-email-1",
+      "name": "Render Follow-up Email #1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 380]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EASYFORM_FROM_EMAIL }}",
+        "toEmail": "={{ $json.extracted.email }}",
+        "subject": "={{ $json._email_subject }}",
+        "text": "={{ $json._email_text }}",
+        "options": {}
+      },
+      "id": "send-email-1",
+      "name": "Send Follow-up #1",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1520, 380],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
+          "name": "EasyForm SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "MERGE INTO EASYFORM.APP.PENDING_REQUESTS tgt USING (SELECT :1 AS USER_ID) src ON tgt.USER_ID = src.USER_ID WHEN MATCHED THEN UPDATE SET EMAIL=:2, LAST_STATUS=:3, MISSING_FIELDS=PARSE_JSON(:4), VALIDATION_ERRORS=PARSE_JSON(:5), EXTRACTED_SO_FAR=PARSE_JSON(:6), ATTEMPT_COUNT=1, LAST_EMAIL_SENT_AT=CURRENT_TIMESTAMP(), NEXT_RETRY_AT=DATEADD(hour, 6, CURRENT_TIMESTAMP()), STATUS='awaiting_user', UPDATED_AT=CURRENT_TIMESTAMP() WHEN NOT MATCHED THEN INSERT (USER_ID, EMAIL, LAST_STATUS, MISSING_FIELDS, VALIDATION_ERRORS, EXTRACTED_SO_FAR, ATTEMPT_COUNT, LAST_EMAIL_SENT_AT, NEXT_RETRY_AT, STATUS) VALUES (:1, :2, :3, PARSE_JSON(:4), PARSE_JSON(:5), PARSE_JSON(:6), 1, CURRENT_TIMESTAMP(), DATEADD(hour, 6, CURRENT_TIMESTAMP()), 'awaiting_user');",
+        "additionalFields": {
+          "queryParams": "={{ $json.user_id }},{{ $json.extracted.email }},{{ $json.status }},{{ JSON.stringify($json.missing_fields || []) }},{{ JSON.stringify($json.validation_errors || []) }},{{ JSON.stringify($json.extracted) }}"
+        }
+      },
+      "id": "snowflake-upsert-pending",
+      "name": "Snowflake: Upsert Pending",
+      "type": "n8n-nodes-base.snowflake",
+      "typeVersion": 1,
+      "position": [1760, 380],
+      "credentials": {
+        "snowflake": {
+          "id": "REPLACE_WITH_SNOWFLAKE_CREDENTIAL_ID",
+          "name": "EasyForm Snowflake"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "IMAP: New Email": {
+      "main": [[{"node": "Build /process Payload", "type": "main", "index": 0}]]
+    },
+    "Build /process Payload": {
+      "main": [[{"node": "Call EasyForm Agent", "type": "main", "index": 0}]]
+    },
+    "Call EasyForm Agent": {
+      "main": [[{"node": "Branch on Status", "type": "main", "index": 0}]]
+    },
+    "Branch on Status": {
+      "main": [
+        [{"node": "Snowflake: Save Candidate", "type": "main", "index": 0}],
+        [{"node": "Render Follow-up Email #1", "type": "main", "index": 0}],
+        [{"node": "Render Follow-up Email #1", "type": "main", "index": 0}]
+      ]
+    },
+    "Snowflake: Save Candidate": {
+      "main": [[{"node": "Snowflake: Clear Pending (if any)", "type": "main", "index": 0}]]
+    },
+    "Render Follow-up Email #1": {
+      "main": [[{"node": "Send Follow-up #1", "type": "main", "index": 0}]]
+    },
+    "Send Follow-up #1": {
+      "main": [[{"node": "Snowflake: Upsert Pending", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": [{"name": "easyform"}]
+}

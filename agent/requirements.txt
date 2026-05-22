@@ -1,0 +1,10 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic[email]==2.9.2
+openai==1.55.3
+langchain==0.3.9
+langchain-openai==0.2.10
+langgraph==0.2.53
+python-multipart==0.0.12
+pymupdf==1.27.2.3
+pillow==11.0.0

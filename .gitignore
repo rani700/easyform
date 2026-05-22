@@ -1,0 +1,14 @@
+# Secrets — never commit (repo is public)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor
+.vscode/
+
+# OS
+.DS_Store

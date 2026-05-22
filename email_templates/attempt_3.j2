@@ -1,0 +1,28 @@
+Subject: Final reminder: your exam application will be cancelled
+
+Hi {{ candidate_name or "there" }},
+
+This is the final reminder. We've reached out twice asking for the items below
+and haven't heard back. If we don't receive a reply within the next 6 hours,
+your application will be cancelled and the partial data we hold will be discarded.
+
+{% if missing_fields %}
+--- Information we still need ---
+{% for field in missing_fields %}
+  - {{ field }}
+{% endfor %}
+{% endif %}
+
+{% if validation_errors %}
+--- Issues with the documents you sent ---
+{% for err in validation_errors %}
+  - [{{ err.code }}] {{ err.detail }}
+{% endfor %}
+{% endif %}
+
+If you do want to continue, simply reply to this email with the missing information
+and corrected documents.
+
+Reference ID: {{ user_id }}
+
+— EasyForm
