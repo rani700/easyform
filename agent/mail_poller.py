@@ -24,7 +24,7 @@ from typing import Any
 from aioimaplib import aioimaplib
 
 from agent.graph import run_graph
-from agent.mail_sender import send_confirmation, send_followup, send_review, send_finalized
+from agent.mail_sender import send_confirmation, send_followup, send_review, send_finalized, send_welcome
 from agent.nodes.llm import text_extract
 from agent.schemas import (
     IncomingDocument,
@@ -328,7 +328,21 @@ async def _process_message(store: Store, raw_bytes: bytes) -> None:
     manual = await _parse_manual_fields(body)
     docs = _extract_attachments(msg)
     if not docs and not manual:
-        logger.info("No new docs and no manual fields from %s; skipping", sender)
+        # Body-only email from someone who hasn't started yet —
+        # send a friendly welcome listing what to send instead of silently skipping.
+        if not pending:
+            logger.info("Body-only email from %s; sending welcome", sender)
+            try:
+                await send_welcome(
+                    to=sender,
+                    user_id=sender,
+                    in_reply_to=inbound_message_id,
+                    reply_to_subject=inbound_subject,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Welcome email failed: %s", exc)
+        else:
+            logger.info("Body-only email from %s with existing pending; skipping", sender)
         return
     manual["email"] = sender
 

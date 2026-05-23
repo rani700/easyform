@@ -287,6 +287,57 @@ async def send_finalized(
     await send_email(to=to, subject=subject, plain_body=plain, html_body=html, in_reply_to=in_reply_to)
 
 
+async def send_welcome(
+    *,
+    to: str,
+    candidate_name: str | None = None,
+    user_id: str,
+    in_reply_to: str | None = None,
+    reply_to_subject: str | None = None,
+) -> None:
+    """Reply to body-only inbound emails (candidate asking 'what should I send?')
+    with the full list of required documents and the natural-language style
+    expected in the body."""
+    rendered = _env.get_template("welcome.html.j2").render(
+        candidate_name=candidate_name,
+        user_id=user_id,
+    )
+    template_subject, html_body = _split_subject(rendered, "EasyForm — here's what to send")
+    plain_body = (
+        f"Hi {candidate_name or 'there'},\n\n"
+        "Thanks for getting in touch! To fill your exam application, please reply with:\n\n"
+        "DOCUMENTS (attach):\n"
+        "  • 10th class marksheet\n"
+        "  • 12th class marksheet\n"
+        "  • Graduation marksheet (final consolidated)\n"
+        "  • Post-graduation marksheet (if applicable)\n"
+        "  • Passport-size photo\n"
+        "  • Signature\n"
+        "  • Aadhaar or PAN card\n\n"
+        "DETAILS (in the email body — write naturally):\n"
+        "  • Marital status (single / married / …)\n"
+        "  • Nationality\n"
+        "  • Category / Caste (General / OBC / SC / ST / EWS)\n"
+        "  • Mobile number\n"
+        "  • Correspondence address (with PIN code)\n"
+        "  • Disability status\n\n"
+        "Example: \"I am single, Indian, OBC. My mobile is 9876543210. My "
+        "correspondence address is Flat 12, Sector 5, Noida - 201301. I have "
+        "no disability.\"\n\n"
+        "Keep the word \"EasyForm\" in the subject line so we route your emails correctly.\n\n"
+        f"Reference ID: {user_id}\n"
+        "— EasyForm"
+    )
+    subject = _threaded_subject(reply_to_subject, template_subject)
+    await send_email(
+        to=to,
+        subject=subject,
+        plain_body=plain_body,
+        html_body=html_body,
+        in_reply_to=in_reply_to,
+    )
+
+
 # Backwards-compat shim
 async def send_confirmation(**kwargs):
     return await send_finalized(**kwargs)
