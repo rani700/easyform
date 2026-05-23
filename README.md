@@ -1,53 +1,56 @@
 # EasyForm
 
-An AI agent (LangChain + LangGraph + GPT-4o vision) that auto-fills Indian government exam
-applications from candidate-submitted documents. Designed to run **headlessly behind n8n** —
-candidates email their documents, n8n forwards them to the agent, and confirmed profiles land
-in Snowflake. Missing or invalid uploads trigger up to 3 follow-up emails (6 h apart) before
-the request is discarded.
+An AI agent (LangChain + LangGraph + GPT-4o vision) that auto-fills Indian government
+exam applications from candidate-submitted documents. Self-contained — one Python
+service handles the **web portal**, the **API**, the **IMAP inbox**, **follow-up
+emails**, and the **SQLite store**. No n8n, no Snowflake required.
 
 ```
-   Candidate email                                  ┌────────────────────────┐
-   (10th, 12th, grad/PG,                            │  Snowflake.CANDIDATES  │
-    Aadhaar/PAN, photo,         needs_info /        │  (final, confirmed)    │
-    signature, manual fields)   invalid             └─────────▲──────────────┘
-        │                            │                        │ complete
-        ▼                            ▼                        │
-   ┌─────────┐  HTTP   ┌────────────────────┐   needs_info  ┌─┴────────────────────┐
-   │  n8n    │ ──────▶ │  EasyForm Agent    │ ────────────▶ │  Snowflake.          │
-   │ (IMAP)  │ ◀────── │  FastAPI+LangGraph │   /invalid    │  PENDING_REQUESTS    │
-   └─────────┘   JSON  └────────────────────┘               └──────────────────────┘
-        │                                                            │
-        │           every 30 min cron                                 │
-        ├────────────────────────────────────────────────────────────┘
-        │   re-email at 6h gaps, max 3 attempts, then discard
-        ▼
-   Follow-up email to candidate
+                                          ┌───────────────────────────────┐
+   Candidate sends email                  │  EasyForm service (1 pod)      │
+   (marksheets, Aadhaar/PAN,     IMAP     │                                │
+    photo, signature, manual    ────────▶ │   mail_poller   ┌───────────┐  │
+    fields in body)                       │       │         │  SQLite    │  │
+                                          │       ▼         │  store     │  │
+   OR uses the web portal      HTTP       │   LangGraph ───▶│ (PVC)      │  │
+   at https://<host>/         ────────▶   │   pipeline      │            │  │
+                                          │       │         │ candidates │  │
+                                          │       ▼         │ pending    │  │
+   ◀── follow-up email   SMTP   ────────  │   mail_sender   └───────────┘  │
+   (or confirmation)                      │                                │
+                                          │   scheduler — every 30 min:    │
+                                          │   re-email at 6h gaps, max 3   │
+                                          │   attempts, then discard       │
+                                          └───────────────────────────────┘
 ```
 
 ## What's in this repo
 
 | Path | Purpose |
 | --- | --- |
-| `agent/` | FastAPI service + LangGraph state machine + per-document vision prompts |
-| `web/index.html` | Web portal — drag-drop upload UI, served by FastAPI at `/` |
+| `agent/` | FastAPI app + LangGraph state machine + vision prompts |
+| `agent/store.py` | SQLite store: candidates, pending_requests, documents_audit |
+| `agent/mail_poller.py` | IMAP poller — turns inbound emails into agent runs |
+| `agent/mail_sender.py` | SMTP follow-up sender (uses templates in `email_templates/`) |
+| `agent/scheduler.py` | 30-min retry scan; bumps attempt counter or discards |
+| `web/index.html` | Web portal (served at `/`) |
+| `email_templates/` | Jinja templates for attempt-1/2/3 follow-up emails |
 | `samples/` | Synthetic test documents + `run_demo.py` test client |
-| `Dockerfile` | Container image for the agent |
-| `snowflake/ddl.sql` | Schema for `CANDIDATES`, `PENDING_REQUESTS`, `DOCUMENTS_AUDIT` + helper views |
-| `n8n/main_workflow.json` | IMAP-triggered intake workflow (importable) |
-| `n8n/retry_cron_workflow.json` | 30-min cron that re-sends reminders and discards stale users |
-| `email_templates/` | Reference text for follow-up emails (the n8n workflows inline the same content) |
-| `.env.example` | Required environment variables |
+| `Dockerfile` | Container image |
+| `.env.example` | All env vars (OpenAI + IMAP/SMTP + cadence) |
+| `legacy/` | Original n8n workflows + Snowflake DDL (no longer needed) |
 
-## Two ways to use it
+## Two ways for candidates to submit
 
-1. **Web portal** — open `http://localhost:8000/` in a browser. Upload documents,
-   fill the extra fields, review the extracted details in an editable table, download
-   the confirmed JSON. Good for individual / interactive use.
-2. **n8n + email** — candidates email their documents; n8n calls the agent and writes
-   to Snowflake. Good for automated batch processing. See the n8n section below.
+1. **Web portal** — open `https://<host>/` in a browser. Drag-drop the documents,
+   fill the form, review the extracted details, download the confirmed JSON.
+2. **By email** — candidates email the documents (and the manual fields in the
+   body) to the configured inbox. The service polls the inbox, processes them,
+   and replies — with the filled details if complete, or a list of what's still
+   needed. If they don't reply within 6 hours, the service follows up; after 3
+   attempts the request is discarded.
 
-Both use the same agent.
+Both paths run through the same LangGraph pipeline.
 
 ## What the agent extracts
 
@@ -56,7 +59,7 @@ From documents:
 - **Permanent address + PIN code** — from Aadhaar
 - **Education records (10th, 12th, graduation, post-graduation)**: institute, year of passing, CGPA/percentage, specialization, course duration, full/part-time
 
-From email body (key: value lines):
+From the email body (or the portal form):
 - `marital_status`, `nationality`, `caste`, `mobile_number`
 - `correspondence_address`, `correspondence_pin_code`, `disability_status`
 
@@ -66,37 +69,33 @@ Validation performed:
 3. **Document-type classification** — each upload is independently classified; flags mismatches
 4. **Image-quality check** — surfaced from GPT-4o's per-doc confidence + quality_issues list
 
-## Running the agent locally
+## Running locally
 
 ```bash
 cd EasyForm
-cp .env.example .env             # then edit .env, set OPENAI_API_KEY
-docker build -t easyform-agent .
-docker run --rm -p 8000:8000 --env-file .env easyform-agent
+cp .env.example .env             # set OPENAI_API_KEY; set MAIL_ENABLED=true for the email flow
+python -m venv .venv && source .venv/bin/activate
+pip install -r agent/requirements.txt
+set -a && source .env && set +a
+uvicorn agent.app:app --reload
 ```
 
-Then open **http://localhost:8000/** for the web portal, or smoke-test the API:
+Then:
+- **http://localhost:8000/** — web portal
+- **http://localhost:8000/admin/status** — background-task health + DB counts
+- **http://localhost:8000/health** — liveness probe
+
+Or with Docker:
 ```bash
-curl http://localhost:8000/health
+docker build -t easyform .
+docker run --rm -p 8000:8000 -v $PWD/data:/data --env-file .env easyform
 ```
 
-Process a request with curl (multipart):
-```bash
-curl -X POST http://localhost:8000/process/multipart \
-  -F user_id=candidate@example.com \
-  -F email=candidate@example.com \
-  -F 'manual_fields_json={"marital_status":"single","nationality":"Indian","caste":"General","mobile_number":"9876543210","correspondence_address":"...","correspondence_pin_code":"110001","disability_status":"None"}' \
-  -F files=@samples/10th.pdf \
-  -F files=@samples/12th.pdf \
-  -F files=@samples/grad.pdf \
-  -F files=@samples/aadhaar.jpg \
-  -F files=@samples/photo.jpg \
-  -F files=@samples/signature.jpg
-```
+(`-v $PWD/data:/data` persists SQLite outside the container.)
 
 ## API contract
 
-### `POST /process` (JSON — preferred for n8n)
+### `POST /process` (JSON)
 
 Request:
 ```json
@@ -136,34 +135,15 @@ Response (`200`):
 ```
 
 `status` semantics:
-- **complete**: ready to write to `CANDIDATES`
-- **needs_info**: some required fields/documents are absent — email user, upsert into `PENDING_REQUESTS`
-- **invalid**: blocking validation error (wrong doc, name mismatch, invalid photo) — same flow as needs_info, error list explains what's wrong
+- **complete**: written to `candidates`; confirmation email sent.
+- **needs_info**: required field/document is absent — upserted into `pending_requests`; attempt-1 follow-up email sent.
+- **invalid**: blocking validation error (wrong doc, name mismatch, invalid photo) — same flow as `needs_info`.
 
-## Snowflake setup
+`POST /process/multipart` is identical but takes real multipart uploads (the web portal uses this).
 
-```bash
-snowsql -f snowflake/ddl.sql
-```
+## Email format candidates should use
 
-This creates `EASYFORM.APP.CANDIDATES`, `PENDING_REQUESTS`, `DOCUMENTS_AUDIT`,
-and two helper views: `PENDING_DUE_FOR_RETRY`, `PENDING_TO_DISCARD`.
-
-## n8n setup
-
-1. **Credentials** — create three in n8n: an `IMAP` for the inbox, an `SMTP` for outbound,
-   and a `Snowflake` account. Note their IDs.
-2. **Environment variables** — set on the n8n instance:
-   - `EASYFORM_AGENT_URL` — e.g. `http://easyform-agent:8000`
-   - `EASYFORM_FROM_EMAIL` — the from-address for follow-up emails
-3. **Import workflows** — `n8n/main_workflow.json` and `n8n/retry_cron_workflow.json`.
-4. **Replace credential IDs** — open each Snowflake/IMAP/SMTP node and swap the placeholder
-   `REPLACE_WITH_*_CREDENTIAL_ID` for the IDs you noted in step 1.
-5. **Activate** both workflows.
-
-### Email format candidates should use
-
-Plain text body with one field per line:
+Plain-text body with one `key: value` per line for the fields not on the documents:
 ```
 marital_status: Single
 nationality: Indian
@@ -173,36 +153,42 @@ correspondence_address: Flat 12, Building A, Sector 5, Noida
 correspondence_pin_code: 201301
 disability_status: None
 ```
-Attachments: the marksheets, Aadhaar, PAN, passport-size photo, signature.
+Attach: 10th/12th/graduation marksheets, Aadhaar (or PAN), passport-size photo,
+signature. PDF and image attachments are both accepted.
 
-## How concurrency works
+## Configuration
 
-- The agent is **stateless**; FastAPI + uvicorn (2 workers in the Dockerfile) handles
-  parallel requests cleanly.
-- n8n queues IMAP-triggered executions, one per email; multiple candidates are processed in
-  parallel up to your n8n concurrency limit.
-- Retry state lives in `PENDING_REQUESTS` keyed on user email — no collisions even if two
-  emails for the same user race (Snowflake `MERGE` keeps it idempotent).
+All via env vars (see `.env.example` for the full list):
 
-## Local development without Docker
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | — | required for vision extraction |
+| `OPENAI_MODEL` | `gpt-4o` | vision-capable model |
+| `MAIL_ENABLED` | `false` | turn the IMAP poller + scheduler on |
+| `IMAP_HOST` / `PORT` / `USER` / `PASSWORD` | Gmail defaults | Gmail App Password works on `587/STARTTLS` SMTP and `993/SSL` IMAP |
+| `SMTP_HOST` / `PORT` / `USER` / `PASSWORD` / `MAIL_FROM` | — | for follow-up emails |
+| `POLL_INTERVAL_SECONDS` | `120` | inbox check cadence |
+| `RETRY_INTERVAL_HOURS` | `6` | wait between follow-up emails |
+| `SCHEDULER_INTERVAL_SECONDS` | `1800` | retry scan cadence |
+| `SQLITE_PATH` | `/data/easyform.db` | DB file; mount a PVC at `/data` in k8s |
 
-```bash
-cd EasyForm
-python -m venv .venv && source .venv/bin/activate
-pip install -r agent/requirements.txt
-export OPENAI_API_KEY=sk-...
-uvicorn agent.app:app --reload
-```
+## Concurrency
+
+- FastAPI + asyncio handle many simultaneous requests per pod.
+- The mail poller processes one inbox poll at a time; per-message processing
+  inside the pipeline runs concurrent OpenAI calls capped by a semaphore (default 4).
+- All retry/discard state lives in `pending_requests` keyed on the candidate's
+  email — multiple emails from the same person are idempotent.
 
 ## File formats
 
-Images (PNG/JPEG/WebP) are sent to GPT-4o directly. **PDFs** are auto-converted to
-images by `agent/nodes/docprep.py` (PyMuPDF) before extraction — multi-page PDFs are
-rendered and stacked vertically (first 4 pages). OpenAI's vision API only accepts image
-MIME types, so this conversion step is required.
+Images (PNG/JPEG/WebP) are sent to GPT-4o directly. **PDFs** are converted to PNG
+by `agent/nodes/docprep.py` (PyMuPDF) before extraction; multi-page PDFs are
+stacked vertically (first 4 pages). OpenAI vision only accepts image MIME types,
+so this conversion step is required.
 
 ## Roadmap / not built
 
-- Face match between passport photo and Aadhaar photo (skipped per requirements — easy to
-  add with `face_recognition` or DeepFace if needed later)
+- Face match between passport photo and Aadhaar photo (skipped per requirements)
 - HTML-formatted follow-up emails
+- Multi-replica deployment (current store is SQLite; switch to PostgreSQL if you scale out)

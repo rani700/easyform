@@ -118,14 +118,42 @@ def merge_with_manual(state: AgentState) -> AgentState:
     )
 
     # Carry forward anything that was confirmed in a prior attempt and is now missing here.
+    _EDU_FIELDS = {"tenth", "twelfth", "graduation", "postgraduation"}
     if req.previous_extracted:
         for field, prev_val in req.previous_extracted.items():
             cur_val = getattr(profile, field, None)
             if cur_val in (None, "", False) and prev_val not in (None, "", False):
+                # Education sub-records come back as plain dicts (serialised JSON);
+                # re-hydrate them so `missing` detection can read their fields.
+                if field in _EDU_FIELDS and isinstance(prev_val, dict):
+                    try:
+                        prev_val = EducationRecord(
+                            **{k: v for k, v in prev_val.items() if not k.startswith("_")}
+                        )
+                    except Exception:
+                        continue
                 try:
                     setattr(profile, field, prev_val)
                 except Exception:
                     pass
+
+    # Apply manual stream hints AFTER carry-forward — by now the education
+    # records exist (either from this email or carried forward), so the hint
+    # can actually fill a missing specialization field.
+    for level, hint in (
+        ("tenth", mf.tenth_specialization),
+        ("twelfth", mf.twelfth_specialization),
+        ("graduation", mf.graduation_specialization),
+        ("postgraduation", mf.postgraduation_specialization),
+    ):
+        if not hint:
+            continue
+        rec = getattr(profile, level, None)
+        if rec is not None and not getattr(rec, "specialization", None):
+            try:
+                rec.specialization = hint
+            except Exception:
+                pass
 
     state.profile = profile
     return state

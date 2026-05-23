@@ -43,12 +43,21 @@ This document is claimed to be a {level} marksheet. Extract the following fields
 
 Rules:
 - If a field is genuinely not visible, set it to null. Do not guess.
-- For 10th and 12th, "specialization" means the stream (Science/Commerce/Arts/etc.) when applicable. For 10th, it is often null.
+- For 10th, "specialization" should be null (Indian Class 10 has no stream).
+- For 12th, "specialization" is the stream (Science/Commerce/Arts/etc.).
 - "course_duration_years" applies mostly to graduation/postgraduation (e.g. 3, 4, 2). For 10th and 12th, this is typically null.
 - Set "confidence" to your overall confidence the extraction is correct.
 - If image quality prevents reading critical fields, list those issues in "quality_issues".
 - Normalize percentages to a number between 0 and 100 (drop the % sign).
 - Convert any DOB to ISO YYYY-MM-DD.
+- PERCENTAGE COMPUTATION: if a consolidated overall percentage is NOT directly
+  printed on the marksheet but the subject-wise marks ARE visible, COMPUTE the
+  percentage yourself. Use this standard convention for Indian boards:
+      percentage = (sum of the 5 best/main subject marks  /  500) * 100
+  Round to 1 decimal place. Exclude additional/optional 6th-subject marks
+  unless that is the only way to fill 5 subjects. If you compute (rather than
+  read) the percentage, mention "computed from subject marks" in
+  "quality_issues" so it's auditable.
 """
 
 TENTH_PROMPT = _EDUCATION_PROMPT_TEMPLATE.format(level="Class 10 (SSC / Secondary)")

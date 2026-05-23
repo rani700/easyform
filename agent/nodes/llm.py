@@ -149,3 +149,50 @@ async def vision_extract(
     except json.JSONDecodeError as exc:
         logger.warning("Could not parse JSON from OpenAI response: %s", exc)
         return {"_parse_error": f"json_decode_failed: {exc}", "_raw": raw}
+
+
+async def text_extract(
+    *,
+    prompt: str,
+    text: str,
+    max_tokens: int = 600,
+) -> dict[str, Any]:
+    """Text-only structured extraction. Used for parsing manual fields written
+    in natural language ('I am single, Indian, belong to SC')."""
+    client = _get_client()
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": text},
+    ]
+
+    last_exc: Exception | None = None
+    response = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            async with _get_semaphore():
+                response = await client.chat.completions.create(
+                    model=_MODEL,
+                    response_format={"type": "json_object"},
+                    max_tokens=max_tokens,
+                    temperature=0.0,
+                    messages=messages,
+                )
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if _is_quota_exhausted(exc) or not _is_retryable(exc) or attempt >= _MAX_RETRIES:
+                logger.warning("text_extract failed: %s", str(exc)[:120])
+                return {"_parse_error": f"openai_call_failed: {exc}", "_raw": ""}
+            delay = min(2 ** attempt * 4, 60) + random.uniform(0, 2)
+            await asyncio.sleep(delay)
+    else:
+        return {"_parse_error": f"openai_call_failed: {last_exc}", "_raw": ""}
+
+    raw = (response.choices[0].message.content or "").strip()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("text_extract could not parse JSON: %s", exc)
+        return {"_parse_error": f"json_decode_failed: {exc}", "_raw": raw}

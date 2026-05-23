@@ -102,6 +102,13 @@ class ManualFields(BaseModel):
     disability_status: Optional[str] = None  # "None" or description
     email: Optional[EmailStr] = None
 
+    # Optional education-stream hints — used when the candidate states the
+    # stream in their email body but it couldn't be read from the marksheet.
+    tenth_specialization: Optional[str] = None
+    twelfth_specialization: Optional[str] = None
+    graduation_specialization: Optional[str] = None
+    postgraduation_specialization: Optional[str] = None
+
 
 # ---------- API request / response ----------
 

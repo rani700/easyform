@@ -1,0 +1,71 @@
+Subject: EasyForm — please review and confirm your details
+
+Hi {{ candidate_name or "there" }},
+
+Great news! We've extracted all the required information from your documents.
+Please review the details below and reply with:
+
+  * "CONFIRM" — if everything is correct (we'll finalise your form)
+  * Your corrections — if anything needs to change, just reply with the right values
+    (e.g., "caste: OBC", or attach a different document)
+
+===========================================================
+                YOUR APPLICATION DETAILS
+===========================================================
+
+PERSONAL
+  Name:               {{ p.name }}
+  Father's Name:      {{ p.father_name }}
+  Mother's Name:      {{ p.mother_name }}
+  Date of Birth:      {{ p.date_of_birth }}
+  Age:                {{ p.age }}
+  Gender:             {{ p.gender }}
+  Marital Status:     {{ p.marital_status }}
+  Nationality:        {{ p.nationality }}
+  Category / Caste:   {{ p.caste }}
+  Disability:         {{ p.disability_status }}
+
+CONTACT
+  Email:              {{ p.email }}
+  Mobile:             {{ p.mobile_number }}
+
+ADDRESS
+  Permanent:          {{ p.permanent_address }} — {{ p.permanent_pin_code }}
+  Correspondence:     {{ p.correspondence_address }} — {{ p.correspondence_pin_code }}
+
+EDUCATION
+{% if p.tenth %}
+  10th    : {{ p.tenth.institute_name }} ({{ p.tenth.year_of_passing }})
+            Board: {{ p.tenth.board_or_university }}
+            {{ 'CGPA ' ~ p.tenth.cgpa if p.tenth.cgpa else (p.tenth.percentage|string ~ '%' if p.tenth.percentage else '—') }}
+{% endif %}
+{% if p.twelfth %}
+  12th    : {{ p.twelfth.institute_name }} ({{ p.twelfth.year_of_passing }})
+            Stream: {{ p.twelfth.specialization }}  |  Board: {{ p.twelfth.board_or_university }}
+            {{ 'CGPA ' ~ p.twelfth.cgpa if p.twelfth.cgpa else (p.twelfth.percentage|string ~ '%' if p.twelfth.percentage else '—') }}
+{% endif %}
+{% if p.graduation %}
+  Grad    : {{ p.graduation.institute_name }} ({{ p.graduation.year_of_passing }})
+            Specialization: {{ p.graduation.specialization }}
+            Mode: {{ p.graduation.course_type }} — {{ p.graduation.course_duration_years }} yrs
+            {{ 'CGPA ' ~ p.graduation.cgpa if p.graduation.cgpa else (p.graduation.percentage|string ~ '%' if p.graduation.percentage else '—') }}
+{% endif %}
+{% if p.postgraduation %}
+  PG      : {{ p.postgraduation.institute_name }} ({{ p.postgraduation.year_of_passing }})
+            Specialization: {{ p.postgraduation.specialization }}
+            {{ 'CGPA ' ~ p.postgraduation.cgpa if p.postgraduation.cgpa else (p.postgraduation.percentage|string ~ '%' if p.postgraduation.percentage else '—') }}
+{% endif %}
+
+DOCUMENTS RECEIVED
+  Aadhaar:            {{ '✓' if p.aadhaar_present else '✗' }}
+  PAN:                {{ '✓' if p.pan_present else '✗' }}
+  Passport Photo:     {{ '✓ valid' if p.passport_photo_valid else '✗ missing/invalid' }}
+  Signature:          {{ '✓ valid' if p.signature_valid else '✗ missing/invalid' }}
+
+===========================================================
+
+Reply with "CONFIRM" to finalise, or send your corrections.
+
+Reference ID: {{ user_id }}
+
+— EasyForm
