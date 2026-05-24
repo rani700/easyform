@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r /app/agent/requirements.txt
 
 COPY agent /app/agent
 COPY web /app/web
+COPY email_templates /app/email_templates
 
 EXPOSE 8000
 
