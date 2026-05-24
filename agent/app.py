@@ -109,13 +109,14 @@ async def admin_status() -> dict:
     counts: dict[str, int | str] = {}
     if _store is not None:
         try:
-            async with _store._conn() as db:  # noqa: SLF001
+            async with _store._conn() as conn:  # noqa: SLF001
                 for label, sql in (
-                    ("candidates", "SELECT COUNT(*) AS c FROM candidates"),
-                    ("pending_awaiting", "SELECT COUNT(*) AS c FROM pending_requests WHERE status='awaiting_user'"),
-                    ("pending_discarded", "SELECT COUNT(*) AS c FROM pending_requests WHERE status='discarded'"),
+                    ("candidates", "SELECT COUNT(*)::int AS c FROM candidates"),
+                    ("pending_awaiting", "SELECT COUNT(*)::int AS c FROM pending_requests WHERE status='awaiting_user'"),
+                    ("pending_confirmation", "SELECT COUNT(*)::int AS c FROM pending_requests WHERE status='awaiting_confirmation'"),
+                    ("pending_discarded", "SELECT COUNT(*)::int AS c FROM pending_requests WHERE status='discarded'"),
                 ):
-                    row = await (await db.execute(sql)).fetchone()
+                    row = await conn.fetchrow(sql)
                     counts[label] = row["c"] if row else 0
         except Exception as exc:  # noqa: BLE001
             counts["error"] = str(exc)
