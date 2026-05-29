@@ -311,10 +311,5 @@ Two ways to access the data:
    # then connect to localhost:15432, db: easyform
    ```
 
-## Roadmap / not built
+<img width="3374" height="2122" alt="image" src="https://github.com/user-attachments/assets/b8b114e9-d3e8-45dc-9548-81efcb5f8d2c" />
 
-- Face match between passport photo and Aadhaar photo (skipped per requirements)
-- Bounce handling — currently dead addresses just burn 3 retry attempts before
-  being discarded; could be wired to mark hard-bounces as `discarded` immediately
-- Multi-replica deployment of the agent — would need IMAP polling
-  coordination (e.g. only one replica holds a leader lease)
