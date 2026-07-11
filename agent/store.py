@@ -308,6 +308,26 @@ class Store:
             except (ValueError, IndexError):
                 return 0
 
+    async def purge_discarded(self, *, retention_days: float = 7.0) -> int:
+        """Delete discarded rows older than the retention window, so the sender
+        is treated as a brand-new address (welcome email) next time they write.
+
+        `updated_at` doubles as the discard timestamp: discard_stale() touches it
+        and discarded rows are never updated again (a real re-submission revives
+        the row to 'awaiting_user' via upsert_pending first).
+        """
+        async with self._conn() as conn:
+            result = await conn.execute(
+                """DELETE FROM pending_requests
+                   WHERE status='discarded'
+                   AND updated_at <= NOW() - ($1 * INTERVAL '1 day')""",
+                retention_days,
+            )
+            try:
+                return int(result.split()[-1])
+            except (ValueError, IndexError):
+                return 0
+
     # ----- documents_audit -----
     async def record_audit(
         self,

@@ -5,6 +5,8 @@ Every SCHEDULER_INTERVAL_SECONDS:
       send the appropriate follow-up template (attempt N+1), bump the counter,
       reset the timer to +6h.
   - Mark rows that hit attempt 3 and have lapsed as `discarded`.
+  - Delete `discarded` rows older than DISCARD_RETENTION_DAYS (default 7), so
+    the address is treated as brand-new (welcome email) if they write again.
 """
 from __future__ import annotations
 
@@ -20,10 +22,11 @@ logger = logging.getLogger(__name__)
 
 _INTERVAL = int(os.environ.get("SCHEDULER_INTERVAL_SECONDS", "1800"))  # 30 min
 _RETRY_HOURS = float(os.environ.get("RETRY_INTERVAL_HOURS", "6"))
+_RETENTION_DAYS = float(os.environ.get("DISCARD_RETENTION_DAYS", "7"))
 
 
-async def _scan_once(store: Store) -> tuple[int, int]:
-    """Returns (sent, discarded) counts."""
+async def _scan_once(store: Store) -> tuple[int, int, int]:
+    """Returns (sent, discarded, purged) counts."""
     sent = 0
     due = await store.list_due_for_retry()
     for row in due:
@@ -53,7 +56,8 @@ async def _scan_once(store: Store) -> tuple[int, int]:
             )
 
     discarded = await store.discard_stale()
-    return sent, discarded
+    purged = await store.purge_discarded(retention_days=_RETENTION_DAYS)
+    return sent, discarded, purged
 
 
 async def run_scheduler(store: Store) -> None:
@@ -63,10 +67,13 @@ async def run_scheduler(store: Store) -> None:
     )
     while True:
         try:
-            sent, discarded = await _scan_once(store)
-            if sent or discarded:
+            sent, discarded, purged = await _scan_once(store)
+            if sent or discarded or purged:
                 logger.info(
-                    "Scheduler tick: %d retry email(s), %d discarded", sent, discarded
+                    "Scheduler tick: %d retry email(s), %d discarded, %d purged",
+                    sent,
+                    discarded,
+                    purged,
                 )
         except asyncio.CancelledError:
             raise

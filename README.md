@@ -113,7 +113,9 @@ needed)      couldn't read
 ```
 
 Scheduler re-sends the follow-up at **6h intervals**, max **3 attempts**, then
-marks the request **discarded**.
+marks the request **discarded**. Discarded requests are kept for
+**`DISCARD_RETENTION_DAYS`** (default 7 days) and then deleted — after that the
+address is treated as brand-new and gets the welcome email again.
 
 ## What the agent extracts
 
@@ -277,6 +279,7 @@ All via env vars (see `.env.example`).
 | `POLL_INTERVAL_SECONDS` | `120` | inbox check cadence |
 | `RETRY_INTERVAL_HOURS` | `6` | wait between follow-up emails |
 | `SCHEDULER_INTERVAL_SECONDS` | `1800` | retry scan cadence |
+| `DISCARD_RETENTION_DAYS` | `7` | how long discarded requests are kept before deletion (then the address starts fresh) |
 | `LLM_MAX_RETRIES` | `5` | retry attempts on OpenAI 429/5xx |
 | `LLM_MAX_CONCURRENCY` | `4` | semaphore cap on simultaneous OpenAI calls |
 
