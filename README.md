@@ -18,6 +18,19 @@ same database.
 Deployed on a homelab Kubernetes cluster via ArgoCD; GitHub Actions builds and
 publishes the agent image to GHCR on every push to `main`.
 
+### Try it yourself
+
+Anyone can use the live system, two ways:
+
+1. **📧 Email** — send a mail to **`ranishwe8a@gmail.com`** with **`EasyForm`**
+   anywhere in the subject (any casing works — `easyform`, `EasyForm applying`,
+   etc.). Attach your documents and/or write your details in plain English in
+   the body. Even an empty "hi" gets a welcome email listing everything needed.
+   The agent replies within ~2 minutes, follows up on what's missing, and
+   finalises once you reply `CONFIRM`.
+2. **🌐 Web form** — open **https://easyform.codeshare.co.in/**, drag-drop your
+   documents, fill the details form, review the extracted profile, and submit.
+
 ## Architecture
 
 ```
@@ -66,7 +79,7 @@ publishes the agent image to GHCR on every push to `main`.
 | `agent/store.py` | **PostgreSQL** store (asyncpg pool): candidates, pending_requests, documents_audit |
 | `agent/mail_poller.py` | IMAP polling + natural-language manual-field parsing + welcome/review/confirm routing |
 | `agent/mail_sender.py` | SMTP sender (multipart/alternative) — plain + HTML templates, threading headers |
-| `agent/scheduler.py` | Every 30 min: re-emails pending users at 6h gaps, max 3 attempts, then discard |
+| `agent/scheduler.py` | Every 30 min: re-emails pending users at 6h gaps, max 3 attempts, then discard; purges discarded rows after 7 days |
 | `agent/prompts/` | Per-doc-type GPT-4o extraction prompts (includes 12th percentage auto-compute) |
 | `web/index.html` | Web portal — drag-drop upload UI served at `/` |
 | `email_templates/` | Jinja templates — both plain (`*.j2`) and HTML (`*.html.j2`) for every email type |
