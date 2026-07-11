@@ -1,5 +1,10 @@
 # EasyForm
 
+[![CI](https://github.com/rani700/easyform/actions/workflows/release-and-publish.yml/badge.svg)](https://github.com/rani700/easyform/actions/workflows/release-and-publish.yml)
+[![Release](https://img.shields.io/github/v/release/rani700/easyform)](https://github.com/rani700/easyform/releases)
+[![License](https://img.shields.io/github/license/rani700/easyform)](LICENSE)
+[![Live demo](https://img.shields.io/badge/live_demo-easyform.codeshare.co.in-4f46e5)](https://easyform.codeshare.co.in/)
+
 An AI agent (LangChain + LangGraph + GPT-4o vision) that auto-fills Indian
 government exam applications from candidate-submitted documents. **One Python
 service** handles the web portal, REST API, IMAP inbox polling, follow-up
@@ -32,6 +37,15 @@ Anyone can use the live system, two ways:
    documents, fill the details form, review the extracted profile, and submit.
 
 ## Architecture
+
+<img alt="End-to-end architecture — candidate email and web-portal paths flow through the LangGraph pipeline (classify → extract → validate → merge → detect missing) into PostgreSQL, with Metabase for admin analytics" src="https://github.com/user-attachments/assets/b8b114e9-d3e8-45dc-9548-81efcb5f8d2c" />
+
+*End-to-end flow: both candidate paths (email via IMAP poller, web portal via
+FastAPI) run the same LangGraph pipeline; results land in PostgreSQL, replies
+go out over SMTP, and admins query the same database through Metabase.*
+
+<details>
+<summary>Text-only version of the diagram</summary>
 
 ```
                                           ┌────────────────────────────────────────┐
@@ -68,6 +82,8 @@ Anyone can use the live system, two ways:
                                                 │   audit       │     .codeshare.co.in
                                                 └───────────────┘
 ```
+
+</details>
 
 ## What's in this repo
 
@@ -325,8 +341,6 @@ Two ways to access the data:
    ssh -L 15432:postgres.easyform.svc.cluster.local:5432 vishal@<homelab-host>
    # then connect to localhost:15432, db: easyform
    ```
-
-<img width="3374" height="2122" alt="image" src="https://github.com/user-attachments/assets/b8b114e9-d3e8-45dc-9548-81efcb5f8d2c" />
 
 ## Roadmap / not built
 

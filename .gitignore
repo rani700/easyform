@@ -7,7 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Local SQLite data
+# Local data
 data/
 
 # Editor
