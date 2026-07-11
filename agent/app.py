@@ -82,7 +82,7 @@ app = FastAPI(
     title="EasyForm Agent",
     version="0.2.0",
     description="Self-contained document-extraction service: web portal, /process API, "
-                "IMAP inbox poller, follow-up emailer, SQLite store. No n8n required.",
+                "IMAP inbox poller, follow-up emailer, PostgreSQL store.",
     lifespan=lifespan,
 )
 

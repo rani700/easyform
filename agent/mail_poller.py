@@ -1,4 +1,4 @@
-"""IMAP inbox poller — the email-driven entry-point that replaces n8n.
+"""IMAP inbox poller — the email-driven entry-point.
 
 Every POLL_INTERVAL_SECONDS the poller:
   1. Connects to IMAP, fetches UNSEEN messages from INBOX.

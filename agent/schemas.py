@@ -117,11 +117,11 @@ class IncomingDocument(BaseModel):
     filename: str
     content_base64: str  # base64-encoded file bytes
     mime_type: str
-    declared_type: Optional[DocumentType] = None  # if n8n already guessed
+    declared_type: Optional[DocumentType] = None  # optional caller-declared type
 
 
 class ProcessRequest(BaseModel):
-    user_id: str  # stable id from n8n (usually the email address)
+    user_id: str  # stable id (usually the email address)
     email: EmailStr
     documents: list[IncomingDocument]
     manual_fields: ManualFields = Field(default_factory=ManualFields)
@@ -137,7 +137,7 @@ class ValidationError(BaseModel):
 
 
 class CandidateProfile(BaseModel):
-    """Merged final profile written to Snowflake `candidates`."""
+    """Merged final profile written to the `candidates` table."""
     user_id: str
     email: EmailStr
 

@@ -1,4 +1,4 @@
-"""Background retry/discard scheduler — replaces the n8n cron workflow.
+"""Background retry/discard scheduler.
 
 Every SCHEDULER_INTERVAL_SECONDS:
   - For each pending row whose `next_retry_at` has passed and attempt_count < 3:

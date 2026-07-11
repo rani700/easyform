@@ -31,7 +31,7 @@ async def _classify_one(filename: str, content_b64: str, mime_type: str) -> Docu
 async def classify_documents(state: AgentState) -> AgentState:
     """Populate state.classified: filename -> DocumentType.
 
-    Uses the declared_type if n8n supplied one AND it isn't UNKNOWN; otherwise calls the LLM.
+    Uses the declared_type if the caller supplied one AND it isn't UNKNOWN; otherwise calls the LLM.
     Runs all LLM calls concurrently.
     """
     pending: list[tuple[str, asyncio.Task[DocumentType]]] = []

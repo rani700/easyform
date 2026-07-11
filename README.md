@@ -86,7 +86,6 @@ Anyone can use the live system, two ways:
 | `samples/` | Synthetic test documents + `run_demo.py` test client |
 | `Dockerfile` | Container image (Python 3.11-slim, copies agent + web + email_templates) |
 | `.env.example` | All env vars (OpenAI + IMAP/SMTP + Postgres + cadence) |
-| `legacy/` | Original n8n workflows + Snowflake DDL — kept for reference, not used |
 
 ## How a candidate uses it
 

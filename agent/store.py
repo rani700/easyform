@@ -1,8 +1,8 @@
 """PostgreSQL store for candidate profiles, pending-retry state, and document audits.
 
 Backed by asyncpg with a connection pool. Schema is created on first connect.
-Reads & writes are concurrent-safe (unlike the previous SQLite implementation),
-which matters when multiple candidates submit at once.
+Reads & writes are concurrent-safe, which matters when multiple candidates
+submit at once.
 """
 from __future__ import annotations
 
